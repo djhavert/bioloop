@@ -1,8 +1,8 @@
-import { createRouter, createWebHistory } from "vue-router";
-import generatedRoutes from "virtual:generated-pages";
-import { setupLayouts } from "virtual:generated-layouts";
-import { isLiveToken, setIntersection } from "@/services/utils";
 import config from "@/config";
+import { isLiveToken, setIntersection } from "@/services/utils";
+import { setupLayouts } from "virtual:generated-layouts";
+import generatedRoutes from "virtual:generated-pages";
+import { createRouter, createWebHistory } from "vue-router";
 
 // https://github.com/JohnCampionJr/vite-plugin-vue-layouts
 const routes = setupLayouts(generatedRoutes);
@@ -18,7 +18,8 @@ const user = ref(useLocalStorage("user", {}));
 function auth_guard(to, _from) {
   // console.log("to", to.path);
   // console.log("from", _from.path);
-  // routeRequiresAuth is false only when requiresAuth is explicitly set to a falsy value
+  // routeRequiresAuth is false only when requiresAuth is explicitly set to a
+  // falsy value
   const routeRequiresAuth = !(
     Object.hasOwn(to.meta, "requiresAuth") && !to.meta.requiresAuth
   );
@@ -79,7 +80,11 @@ router.beforeEach(auth_guard);
 // https://github.com/vuejs/vue-router/issues/914#issuecomment-1019253370
 router.afterEach((to, _from) => {
   nextTick(() => {
-    document.title = to.meta?.title || config.appTitle;
+    // set page title as <title> | appTitle if meta.title is set
+    // otherwise set page title as appTitle
+    document.title = to.meta?.title
+      ? `${to.meta.title} | ${config.appTitle}`
+      : config.appTitle;
   });
 });
 

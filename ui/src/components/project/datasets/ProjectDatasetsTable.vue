@@ -67,15 +67,27 @@
         />
       </div>
       <div v-else class="flex justify-center">
-        <!-- dataset is not staged and a workflow with staging is pending -->
-        <half-circle-spinner
-          class="flex-none"
-          v-if="rowData.is_staging_pending"
-          :animation-duration="1000"
-          :size="24"
-          :color="colors.warning"
+        <!-- dataset is not staged and has not been archived yet -->
+        <va-button
+          v-if="!rowData.archive_path"
+          class="shadow"
+          preset="primary"
+          color="info"
+          icon="cloud_sync"
+          disabled
         />
-
+        <!-- dataset is not staged and is being staged -->
+        <va-popover
+          v-else-if="rowData.is_staging_pending"
+          :message="'Dataset is being staged'"
+        >
+          <half-circle-spinner
+            class="flex-none"
+            :animation-duration="1000"
+            :size="24"
+            :color="colors.warning"
+          />
+        </va-popover>
         <!-- dataset is not staged and is not being staged -->
         <va-button
           v-else
@@ -124,9 +136,22 @@
     <template #cell(updated_at)="{ value }">
       <span>{{ datetime.date(value) }}</span>
     </template>
+
+    <template #cell(assigned)="{ rowData }">
+      <div class="text-sm">
+        <div v-if="rowData?.assignor">
+          by
+          <span class="font-semibold">
+            {{ rowData.assignor.username }}
+          </span>
+        </div>
+        <div>on {{ datetime.date(rowData.assigned_at) }}</div>
+      </div>
+    </template>
   </va-data-table>
 
   <Pagination
+    data-testid="project-datasets-pagination"
     v-model:page="currentPageIndex"
     v-model:page_size="pageSize"
     :total_results="total_results"
@@ -150,13 +175,13 @@ import config from "@/config";
 import DatasetService from "@/services/dataset";
 import * as datetime from "@/services/datetime";
 import projectService from "@/services/projects";
+import toast from "@/services/toast";
 import { formatBytes } from "@/services/utils";
 import wfService from "@/services/workflow";
 import { useAuthStore } from "@/stores/auth";
 import { HalfCircleSpinner } from "epic-spinners";
 import _ from "lodash";
 import { useColors } from "vuestic-ui";
-import toast from "@/services/toast";
 
 const { colors } = useColors();
 const auth = useAuthStore();
@@ -195,7 +220,8 @@ const defaultSortOrder = ref("desc");
 
 const currentPageIndex = ref(1);
 
-// used for OFFSET clause in the SQL used to retrieve the next paginated batch of results
+// used for OFFSET clause in the SQL used to retrieve the next paginated batch
+// of results
 const offset = computed(() => (currentPageIndex.value - 1) * pageSize.value);
 
 // Criterion based on search input
@@ -203,8 +229,8 @@ const search_query = computed(() => {
   return filterInput.value?.length > 0 && { name: filterInput.value };
 });
 
-// Aggregation of all filtering criteria. Used for retrieving results, and configuring number of
-// pages for pagination.
+// Aggregation of all filtering criteria. Used for retrieving results, and
+// configuring number of pages for pagination.
 const datasets_filter_query = computed(() => {
   return {
     ...filters_group_query.value,
@@ -212,22 +238,23 @@ const datasets_filter_query = computed(() => {
   };
 });
 
-// Criterion for sorting. Initial sorting order is based on the `updated_at` field. The sorting
-// criterion can be updated, which will trigger a call to retrieve the updated search results.
-// Note - va-data-table supports sorting by one column at a time, so this object should always have
-// a single key-value pair.
+// Criterion for sorting. Initial sorting order is based on the `updated_at`
+// field. The sorting criterion can be updated, which will trigger a call to
+// retrieve the updated search results. Note - va-data-table supports sorting by
+// one column at a time, so this object should always have a single key-value
+// pair.
 let datasets_sort_query = computed(() => {
   return { [defaultSortField.value]: defaultSortOrder.value };
 });
 
-// Criteria used to limit the number of results retrieved, and to define the offset starting at
-// which the next batch of results will be retrieved.
+// Criteria used to limit the number of results retrieved, and to define the
+// offset starting at which the next batch of results will be retrieved.
 const datasets_batching_query = computed(() => {
-  return { offset: offset.value, limit: pageSize.value };
+  return { skip: offset.value, take: pageSize.value };
 });
 
-// Aggregate of all other criteria. Used for retrieving results according to the criteria
-// specified.
+// Aggregate of all other criteria. Used for retrieving results according to
+// the criteria specified.
 const datasets_retrieval_query = computed(() => {
   return {
     ...datasets_filter_query.value,
@@ -268,8 +295,8 @@ watch(_triggerDatasetsRetrieval, () => {
   }
 });
 
-// _datasets is a mapping of dataset_ids to dataset objects. While polling one or more datasets,
-// this object is updated with latest dataset values.
+// _datasets is a mapping of dataset_ids to dataset objects. While polling one
+// or more datasets, this object is updated with latest dataset values.
 watch(
   projectDatasets,
   () => {
@@ -284,7 +311,8 @@ watch(
 );
 
 watch([datasets_sort_query, datasets_filter_query], () => {
-  // when sorting or filtering criteria changes, show results starting from the first page
+  // when sorting or filtering criteria changes, show results starting from the
+  // first page
   currentPageIndex.value = 1;
 });
 
@@ -296,10 +324,16 @@ watch(datasets_retrieval_query, (newQuery, oldQuery) => {
 });
 
 const rows = computed(() => {
-  return Object.values(_datasets.value).map((ds) => ({
-    ...ds,
-    is_staging_pending: wfService.is_step_pending("VALIDATE", ds.workflows),
-  }));
+  return Object.values(_datasets.value).map((ds) => {
+    const assoc = getCurrentProjAssoc(ds.projects) || {};
+    const { assigned_at, assignor } = assoc;
+    return {
+      ...ds,
+      assigned_at,
+      assignor,
+      is_staging_pending: wfService.is_step_pending("VALIDATE", ds.workflows),
+    };
+  });
 });
 
 const tracking = computed(() => {
@@ -310,7 +344,7 @@ const tracking = computed(() => {
 
 function fetch_and_update_dataset(id) {
   // console.log("fetch_and_update_dataset", id);
-  DatasetService.getById({ id })
+  DatasetService.getById({ id, include_projects: true })
     .then((res) => {
       _datasets.value[id] = res.data;
     })
@@ -351,16 +385,18 @@ watch(tracking, () => {
 });
 
 /**
- * Results are fetched in batches for efficient pagination, but the sorting criteria specified
- * needs to query all of persistent storage (as opposed to the current batch of retrieved results).
- * Hence, va-data-table's default sorting behavior (which would normally only sort the current
- * batch of results) is overridden (by providing each column with a `sortingFn` prop that does
- * nothing), and instead, network calls are made to run the sorting criteria across all of
- * persistent storage. The field to sort the results by and the sort order are captured in
- * va-data-table's 'sorted' event, and added to the sorting criteria maintained in the
- * `datasets_sort_query` reactive variable.
+ * Results are fetched in batches for efficient pagination,
+ * but the sorting criteria specified needs to query all of persistent storage
+ * (as opposed to the current batch of retrieved results). Hence,
+ * va-data-table's default sorting behavior (which would normally only sort the
+ * current batch of results) is overridden (by providing each column with a
+ * `sortingFn` prop that does nothing), and instead,
+ * network calls are made to run the sorting criteria across all of persistent
+ * storage. The field to sort the results by and the sort order are captured in
+ * va-data-table's 'sorted' event, and added to the sorting criteria maintained
+ * in the `datasets_sort_query` reactive variable.
  */
-const columns = [
+const columns = computed(() => [
   {
     key: "name",
     sortable: true,
@@ -392,7 +428,14 @@ const columns = [
     sortable: true,
     sortingFn: () => {}, // overrides va-data-table's default sorting behavior
   },
-];
+  ...(auth.canOperate
+    ? [
+        {
+          key: "assigned",
+        },
+      ]
+    : []),
+]);
 
 // download modal
 const downloadModal = ref(null);
@@ -408,8 +451,11 @@ const stageModal = ref(null);
 const datasetToStage = ref({});
 
 function openModalToStageProject(dataset) {
-  // console.log("openModalToStageProject", dataset);
   datasetToStage.value = dataset;
   stageModal.value.show();
+}
+
+function getCurrentProjAssoc(assocs) {
+  return assocs?.filter((obj) => obj.project_id === props.project.id)?.[0];
 }
 </script>

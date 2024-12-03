@@ -46,7 +46,7 @@
               <ProjectUsersList
                 :users="users"
                 v-if="users?.length > 0"
-                :show-assigned-date="users?.length < 10"
+                :show-assign-data="users?.length < 10"
                 :wrap="users?.length >= 10"
               />
               <div v-else>This project has no associated users</div>
@@ -91,6 +91,7 @@
             <div class="flex gap-9">
               <!-- merge button -->
               <va-button
+                data-testid="merge-projects-button"
                 preset="secondary"
                 border-color="info"
                 class="flex-none"
@@ -165,6 +166,7 @@ import toast from "@/services/toast";
 import { useAuthStore } from "@/stores/auth";
 import { useNavStore } from "@/stores/nav";
 import { useProjectFormStore } from "@/stores/projects/projectForm";
+import { useUIStore } from "@/stores/ui";
 
 const props = defineProps({ projectId: String });
 const auth = useAuthStore();
@@ -172,6 +174,7 @@ const router = useRouter();
 
 const projectFormStore = useProjectFormStore();
 const nav = useNavStore();
+const ui = useUIStore();
 
 const project = ref({});
 const projectId = computed(() => {
@@ -190,6 +193,7 @@ watch(project, () => {
       label: project.value?.name,
     },
   ]);
+  ui.setTitle(project.value?.name);
 });
 
 function fetch_project() {
@@ -222,6 +226,7 @@ const users = computed(() => {
   return (project.value.users || []).map((obj) => ({
     ...obj.user,
     assigned_at: obj.assigned_at,
+    assignor: obj.assignor,
   }));
 });
 
@@ -247,7 +252,8 @@ function handleEditUpdate() {
         path: `/projects/${new_slug}`,
       });
     } else {
-      // update prop which will trigger re-fetching of project-dataset associations
+      // update prop which will trigger re-fetching of project-dataset
+      // associations
       triggerDatasetsRetrieval.value = true;
     }
   });
@@ -284,13 +290,13 @@ function openMergeModal() {
 }
 </script>
 
-<route lang="yaml">
-meta:
-title: Projects
-</route>
-
 <style scoped>
 /* .general-info {
   --va-card-padding: 0.75rem;
 } */
 </style>
+
+<route lang="yaml">
+meta:
+  title: Project Details
+</route>

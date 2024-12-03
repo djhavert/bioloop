@@ -137,7 +137,9 @@
                   </va-button>
 
                   <va-button
-                    :disabled="!dataset.is_staged"
+                    :disabled="
+                      !dataset.is_staged || !config.enabledFeatures.downloads
+                    "
                     class="flex-initial"
                     color="primary"
                     border-color="primary"
@@ -194,7 +196,10 @@
                     <i-mdi-harddisk class="text-xl" />
                     <span> {{ formatBytes(dataset.du_size) }} </span>
                   </div>
-                  <div class="flex items-center gap-1">
+                  <div
+                    class="flex items-center gap-1"
+                    v-if="config.enabledFeatures.genomeBrowser"
+                  >
                     <i-mdi-file-multiple class="text-xl" />
                     <span> {{ dataset.metadata?.num_genome_files }} </span>
                   </div>
@@ -255,13 +260,15 @@
       />
 
       <!-- Audit logs -->
-      <div v-if="dataset.audit_logs && dataset.audit_logs.length > 0">
+      <div v-if="dataset?.audit_logs?.length">
         <va-card>
-          <va-card-title>
-            <span class="text-xl font-bold"> AUDIT LOG </span>
+          <va-card-title class="">
+            <div class="flex flex-nowrap items-center w-full">
+              <span class="text-lg"> Audit Logs </span>
+            </div>
           </va-card-title>
           <va-card-content>
-            <dataset-audit-logs :logs="dataset.audit_logs" />
+            <AuditLogs :logs="dataset.audit_logs" />
           </va-card-content>
         </va-card>
       </div>
@@ -353,7 +360,11 @@ const polling_interval = computed(() => {
 
 function fetch_dataset(show_loading = false) {
   loading.value = show_loading;
-  DatasetService.getById({ id: props.datasetId, bundle: true })
+  DatasetService.getById({
+    id: props.datasetId,
+    bundle: true,
+    initiator: true,
+  })
     .then((res) => {
       const _dataset = res.data;
       const _workflows = _dataset?.workflows || [];
@@ -395,8 +406,9 @@ watch(
 
 /**
  * providing the interval directly will kick of the polling immediately
- * provide a ref which will resolve to null when there are no active workflows and to 10s otherwise
- * now it can be controlled by resume and pause whenever active_wf changes
+ * provide a ref which will resolve to null when there are no active workflows
+ * and to 10s otherwise now it can be controlled by resume and pause whenever
+ * active_wf changes
  */
 const poll = useIntervalFn(fetch_dataset, polling_interval);
 

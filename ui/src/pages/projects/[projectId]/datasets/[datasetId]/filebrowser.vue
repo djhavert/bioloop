@@ -1,7 +1,7 @@
 <template>
   <FileBrowser
     :dataset-id="props.datasetId"
-    :show-download="config.file_browser.enable_downloads && dataset.is_staged"
+    :show-download="config.enabledFeatures.downloads && dataset.is_staged"
   />
 </template>
 
@@ -51,6 +51,7 @@ Promise.all([
         label: "File Browser",
       },
     ]);
+    useTitle(project.name);
   })
   .catch((err) => {
     console.error(err);

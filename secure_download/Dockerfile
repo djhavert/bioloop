@@ -1,36 +1,36 @@
 FROM node:19
 
 ARG APP_GID
-ARG APP_UID 
+ARG APP_UID
 
 # Modify node user to be gid and uid 1001 to not conflict with rcsconf
 RUN groupmod -g 1001 node \
   && usermod -u 1001 -g 1001 node
 
-
-# create appuser and appgroup with the same ids as in the production VM.
-RUN groupadd -o --gid ${APP_GID} appgroup
-RUN useradd -ms /bin/bash --uid ${APP_UID} --gid ${APP_GID} appuser
+# create scauser and sca group with the same ids as in the production VM.
+RUN groupadd -o --gid ${APP_GID} sca
+RUN useradd -ms /bin/bash --uid ${APP_UID} --gid ${APP_GID} scauser
 
 WORKDIR /opt/sca/app
-RUN chown -R appuser:appgroup /opt/sca/app
+RUN chown -R scauser:sca /opt/sca/app
 
 # execute below steps as
-USER appuser:appgroup
+USER scauser:sca
 
 # create node_modules directory before the external / docker volume mounts
 # otherwise docker daemon will attempt to create this directory and it will be owned by root:root.
 RUN mkdir /opt/sca/app/node_modules
 
 # setup for installing npm global packages as non-root user
-RUN npm config set prefix '/home/appuser/.local/'
-RUN mkdir -p /home/appuser/.local/bin
-ENV PATH="/home/appuser/.local/bin/:${PATH}"
+RUN npm config set prefix '/home/scauser/.local/'
+RUN mkdir -p /home/scauser/.local/bin
+ENV PATH="/home/scauser/.local/bin/:${PATH}"
 
 # install pnpm and install packages from pnpm-lock.yaml
 RUN npm install pm2 -g
 # RUN npm install -g pnpm
-ENTRYPOINT npm ci && exec pm2-runtime ecosystem.config.js
+#ENTRYPOINT npm ci && npx prisma db push && exec pm2-runtime ecosystem.config.js
+ENTRYPOINT npm install && exec pm2-runtime ecosystem.config.js
 # ENTRYPOINT pnpm fetch && npx prisma db push && exec /opt/sca/app/node_modules/.bin/nodemon --signal SIGTERM src/index.js
 
 # Entrypoint will be run in the shell mode - https://docs.docker.com/engine/reference/builder/#shell-form-entrypoint-example

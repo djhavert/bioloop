@@ -132,7 +132,7 @@ def get_all_datasets(
         name=None,
         days_since_last_staged=None,
         deleted=False,
-        archived=False,
+        archived=None,
         bundle=False):
     with APIServerSession() as s:
         payload = {
@@ -149,11 +149,17 @@ def get_all_datasets(
         return [dataset_getter(dataset) for dataset in datasets]
 
 
-def get_dataset(dataset_id: str, files: bool = False, bundle: bool = False):
+def get_dataset(dataset_id: str,
+                files: bool = False,
+                bundle: bool = False,
+                include_upload_log: bool = False,
+                workflows: bool = False):
     with APIServerSession() as s:
         payload = {
             'files': files,
-            'bundle': bundle
+            'bundle': bundle,
+            'workflows': workflows,
+            'include_upload_log': include_upload_log
         }
         r = s.get(f'datasets/{dataset_id}', params=payload)
 
@@ -179,6 +185,14 @@ def add_files_to_dataset(dataset_id, files: list[dict]):
     with APIServerSession() as s:
         req_body = [int_to_str(f, 'size') for f in files]
         r = s.post(f'datasets/{dataset_id}/files', json=req_body)
+        r.raise_for_status()
+
+
+def add_dataset_to_project(dataset_id, project_id):
+  with APIServerSession() as s:
+        r = s.patch(f'projects/{project_id}/datasets', json={
+            'add_dataset_ids': [dataset_id]
+        })
         r.raise_for_status()
 
 
@@ -239,6 +253,31 @@ def get_all_workflows():
         r = s.get('workflows/current')
         r.raise_for_status()
         return r.json()
+
+
+def get_dataset_upload_logs():
+    with APIServerSession() as s:
+        r = s.get(f'datasetUploads')
+        r.raise_for_status()
+        return r.json()
+
+
+def update_dataset_upload_log(uploaded_dataset_id: int, log_data: dict):
+    with APIServerSession() as s:
+        r = s.patch(f'datasetUploads/{uploaded_dataset_id}', json=log_data)
+        r.raise_for_status()
+
+
+def delete_dataset_upload_log(uploaded_dataset_id: int):
+    with APIServerSession() as s:
+        r = s.delete(f'datasetUploads/{uploaded_dataset_id}')
+        r.raise_for_status()
+
+
+def create_notification(payload: dict):
+    with APIServerSession() as s:
+        r = s.post('notifications', json=payload)
+        r.raise_for_status()
 
 
 if __name__ == '__main__':

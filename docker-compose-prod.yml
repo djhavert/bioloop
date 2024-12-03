@@ -19,6 +19,8 @@ services:
     volumes:
       - ./api/:/opt/sca/app:z
       - api_modules:/opt/sca/app/node_modules:z
+      - ${FILESYSTEM_BASE_DIR_SCRATCH}:${FILESYSTEM_MOUNT_DIR_SCRATCH}
+      - ${FILESYSTEM_BASE_DIR_PROJECT}:${FILESYSTEM_MOUNT_DIR_PROJECT}
     expose:
       - 3030
     ports:
@@ -34,6 +36,7 @@ services:
         ipv4_address: 172.19.2.3
       signet_network:
         ipv4_address: 172.19.3.6
+
 
   postgres:
     image: postgres:14.5
