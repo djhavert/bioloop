@@ -188,6 +188,14 @@ def add_files_to_dataset(dataset_id, files: list[dict]):
         r.raise_for_status()
 
 
+def add_dataset_to_project(dataset_id, project_id):
+  with APIServerSession() as s:
+        r = s.patch(f'projects/{project_id}/datasets', json={
+            'add_dataset_ids': [dataset_id]
+        })
+        r.raise_for_status()
+
+
 def upload_report(dataset_id, report_filename):
     filename = report_filename.name
     file_obj = open(report_filename, 'rb')
